@@ -421,12 +421,13 @@ class QuerySetMixin(object):
         clone._for_write = True  # affects routing
 
         objects = list(clone)
-        rows = clone.update(**kwargs)
+        pks = {obj.pk for obj in objects}
+        rows = clone.update(**kwargs, check_test=False, count_invalidated_updates=len(pks))
 
         # TODO: do not refetch objects but update with kwargs in simple cases?
         # We use clone database to fetch new states, as this is the db they were written to.
         # Using router with new_objects may fail, using self may return slave during lag.
-        pks = {obj.pk for obj in objects}
+
         new_objects = self.model.objects.filter(pk__in=pks).using(clone.db)
         for obj in chain(objects, new_objects):
             invalidate_obj(obj, using=clone.db)

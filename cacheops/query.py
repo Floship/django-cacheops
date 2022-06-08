@@ -27,7 +27,7 @@ from .utils import md5
 from .sharding import get_prefix
 from .redis import redis_client, handle_connection_failure, load_script
 from .tree import dnfs
-from .invalidation import invalidate_obj, invalidate_dict, skip_on_no_invalidation
+from .invalidation import invalidate_obj, invalidate_dict, skip_on_no_invalidation, invalidate_model
 from .transaction import transaction_states
 from .signals import cache_read
 
@@ -384,8 +384,9 @@ class QuerySetMixin(object):
         with atomic(using=clone.db):
             objects = list(clone.select_for_update())
             pks = {obj.pk for obj in objects}
+            count_invalidated_updates = len(pks)
 
-            rows = clone.update(**kwargs, check_test=False, count_invalidated_updates=len(pks))
+            rows = clone.update(**kwargs, check_test=False, count_invalidated_updates=count_invalidated_updates)
 
             # TODO: do not refetch objects but update with kwargs in simple cases?
             # We use clone database to fetch new states, as this is the db they were written to.
@@ -393,8 +394,11 @@ class QuerySetMixin(object):
 
             new_objects = self.model.objects.filter(pk__in=pks).using(clone.db)
 
-        for obj in chain(objects, new_objects):
-            invalidate_obj(obj, using=clone.db)
+        if count_invalidated_updates > 5000:
+            invalidate_model(self.model)
+        else:
+            for obj in chain(objects, new_objects):
+                invalidate_obj(obj, using=clone.db)
 
         return rows
 

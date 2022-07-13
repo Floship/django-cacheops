@@ -18,7 +18,6 @@ from django.db.transaction import atomic
 try:
     from django.db.models.query import MAX_GET_RESULTS
     from django.db import connections
-    from django.conf import settings as django_settings
 except ImportError:
     MAX_GET_RESULTS = None
 
@@ -395,7 +394,7 @@ class QuerySetMixin(object):
 
             new_objects = self.model.objects.filter(pk__in=pks).using(clone.db)
 
-        if count_invalidated_updates > django_settings.CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT:
+        if count_invalidated_updates > settings.CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT:
             invalidate_model(self.model)
         else:
             for obj in chain(objects, new_objects):

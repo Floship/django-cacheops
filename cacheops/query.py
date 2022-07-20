@@ -386,7 +386,7 @@ class QuerySetMixin(object):
             pks = {obj.pk for obj in objects}
             count_invalidated_updates = len(pks)
 
-            rows = clone.update(**kwargs, check_test=False, count_invalidated_updates=count_invalidated_updates)
+            rows = clone.update(**kwargs, check_test=False)
 
             # TODO: do not refetch objects but update with kwargs in simple cases?
             # We use clone database to fetch new states, as this is the db they were written to.

@@ -380,11 +380,13 @@ class QuerySetMixin(object):
     def invalidated_update(self, **kwargs):
         clone = self._clone().nocache().select_related(None)
         clone._for_write = True  # affects routing
+        if clone.count() > settings.CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT:
+            invalidate_model(self.model)
+            return clone.update(**kwargs, check_test=False)
 
         with atomic(using=clone.db):
             objects = list(clone.select_for_update())
             pks = {obj.pk for obj in objects}
-            count_invalidated_updates = len(pks)
 
             rows = clone.update(**kwargs, check_test=False)
 
@@ -394,11 +396,8 @@ class QuerySetMixin(object):
 
             new_objects = self.model.objects.filter(pk__in=pks).using(clone.db)
 
-        if count_invalidated_updates > settings.CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT:
-            invalidate_model(self.model)
-        else:
-            for obj in chain(objects, new_objects):
-                invalidate_obj(obj, using=clone.db)
+        for obj in chain(objects, new_objects):
+            invalidate_obj(obj, using=clone.db)
 
         return rows
 

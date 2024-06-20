@@ -24,6 +24,7 @@ class Defaults:
     CACHEOPS_SKIP_FIELDS = "FileField", "TextField", "BinaryField", "JSONField"
     CACHEOPS_LONG_DISJUNCTION = 8
     CACHEOPS_SERIALIZER = 'pickle'
+    CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT = 5000
 
     FILE_CACHE_DIR = '/tmp/cacheops_file_cache'
     FILE_CACHE_TIMEOUT = 60*60*24*30

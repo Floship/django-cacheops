@@ -1,7 +1,7 @@
 import sys
 import threading
-from random import random
 
+from random import random
 from funcy import select_keys, cached_property, once, once_per, monkey, wraps, walk, chain
 from funcy import lmap, lcat, join_with
 
@@ -19,7 +19,7 @@ from .utils import md5
 from .getset import cache_thing, getting
 from .sharding import get_prefix
 from .tree import dnfs
-from .invalidation import invalidate_obj, invalidate_dict, skip_on_no_invalidation
+from .invalidation import invalidate_obj, invalidate_dict, skip_on_no_invalidation, invalidate_model
 from .transaction import transaction_states
 from .signals import cache_read
 
@@ -373,15 +373,20 @@ class QuerySetMixin(object):
     def invalidated_update(self, **kwargs):
         clone = self._clone().nocache().select_related(None)
         clone._for_write = True  # affects routing
+        if clone.count() > settings.CACHEOPS_COUNT_INVALIDATED_UPDATES_LIMIT:
+            invalidate_model(self.model)
+            return clone.update(**kwargs, check_test=False)
 
         with atomic(using=clone.db):
             objects = list(clone.select_for_update())
-            rows = clone.update(**kwargs)
+            pks = {obj.pk for obj in objects}
+
+            rows = clone.update(**kwargs, check_test=False)
 
             # TODO: do not refetch objects but update with kwargs in simple cases?
             # We use clone database to fetch new states, as this is the db they were written to.
             # Using router with new_objects may fail, using self may return slave during lag.
-            pks = {obj.pk for obj in objects}
+
             new_objects = self.model.objects.filter(pk__in=pks).using(clone.db)
 
         for obj in chain(objects, new_objects):

@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from functools import reduce
+import operator
 import re
 import platform
 import unittest
@@ -646,11 +648,8 @@ class IssueTests(BaseTestCase):
     def test_385(self):
         Client.objects.create(name='Client Name')
 
-        with self.assertRaises(AttributeError) as e:
+        with self.assertRaisesRegex(AttributeError, "local object"):
             Client.objects.filter(name='Client Name').cache().first()
-        self.assertEqual(
-            str(e.exception),
-            "Can't pickle local object 'Client.__init__.<locals>.curry.<locals>._curried'")
 
         invalidate_model(Client)
 
@@ -717,6 +716,19 @@ class IssueTests(BaseTestCase):
         )
         # no error raises on delete
         media_type.delete()
+
+    def test_480(self):
+        orm_lookups = ['title__icontains', 'category__title__icontains']
+        search_terms = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13']
+        queryset = Post.objects.filter(visible=True)
+        conditions = []
+        for search_term in search_terms:
+            queries = [
+                models.Q(**{orm_lookup: search_term})
+                for orm_lookup in orm_lookups
+            ]
+            conditions.append(reduce(operator.or_, queries))
+        list(queryset.filter(reduce(operator.and_, conditions)).cache())
 
 
 class RelatedTests(BaseTestCase):

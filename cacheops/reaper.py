@@ -20,7 +20,12 @@ def reap_conjs(
     max_members: int = 1000,
     time_budget_seconds: float = 1,
 ):
-    """Remove stale query references from cacheops conjunction sets within hard limits."""
+    """Remove stale query references from cacheops conjunction sets within hard limits.
+
+    Cacheops records cached query keys in conjunction sets for invalidation. Query keys
+    expire independently, so stale references can accumulate and make later invalidations
+    block Redis. This reaper removes only references whose query keys are absent.
+    """
     _validate_limits(
         chunk_size=chunk_size,
         min_conj_set_size=min_conj_set_size,

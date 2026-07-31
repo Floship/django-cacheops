@@ -54,47 +54,69 @@ def reap_conjs(
     prefix = get_prefix(dbs=[using])
     try:
         scan_count = max(1, min(chunk_size, max_conj_sets))
-        for conj_key in redis_client.scan_iter(prefix + "conj:*", count=scan_count):
+        cursor = 0
+        while True:
             if _time_exhausted(deadline):
                 stats["stopped_reason"] = "time_budget"
                 break
 
-            stats["sets_scanned"] += 1
-            try:
-                total = redis_client.scard(conj_key)
-            except RedisError as exc:
-                _record_error(stats, "scard", exc)
-                break
-
-            if _time_exhausted(deadline):
-                stats["stopped_reason"] = "time_budget"
-                break
-            if total < min_conj_set_size:
-                continue
-
-            stats["sets_eligible"] += 1
-            if stats["sets_processed"] >= max_conj_sets:
-                stats["stopped_reason"] = "max_conj_sets"
-                break
-
-            remaining_members = max_members - stats["members_scanned"]
-            if remaining_members <= 0:
-                stats["stopped_reason"] = "max_members"
-                break
-
-            stats["sets_processed"] += 1
-            outcome = _clear_conj_key(
-                conj_key,
-                chunk_size=chunk_size,
-                max_members=remaining_members,
-                deadline=deadline,
-                dry_run=dry_run,
+            cursor, conj_keys = redis_client.scan(
+                cursor,
+                match=prefix + "conj:*",
+                count=scan_count,
             )
-            for name in ("members_scanned", "stale_members_found", "stale_members_removed"):
-                stats[name] += outcome[name]
-            stats["errors"].extend(outcome["errors"])
-            if outcome["stopped_reason"] != "completed":
-                stats["stopped_reason"] = outcome["stopped_reason"]
+            if _time_exhausted(deadline):
+                stats["stopped_reason"] = "time_budget"
+                break
+
+            for conj_key in conj_keys:
+                if _time_exhausted(deadline):
+                    stats["stopped_reason"] = "time_budget"
+                    break
+
+                stats["sets_scanned"] += 1
+                try:
+                    total = redis_client.scard(conj_key)
+                except RedisError as exc:
+                    _record_error(stats, "scard", exc)
+                    break
+
+                if _time_exhausted(deadline):
+                    stats["stopped_reason"] = "time_budget"
+                    break
+                if total < min_conj_set_size:
+                    continue
+
+                stats["sets_eligible"] += 1
+                if stats["sets_processed"] >= max_conj_sets:
+                    stats["stopped_reason"] = "max_conj_sets"
+                    break
+
+                remaining_members = max_members - stats["members_scanned"]
+                if remaining_members <= 0:
+                    stats["stopped_reason"] = "max_members"
+                    break
+
+                stats["sets_processed"] += 1
+                outcome = _clear_conj_key(
+                    conj_key,
+                    chunk_size=chunk_size,
+                    max_members=remaining_members,
+                    deadline=deadline,
+                    dry_run=dry_run,
+                )
+                for name in (
+                    "members_scanned",
+                    "stale_members_found",
+                    "stale_members_removed",
+                ):
+                    stats[name] += outcome[name]
+                stats["errors"].extend(outcome["errors"])
+                if outcome["stopped_reason"] != "completed":
+                    stats["stopped_reason"] = outcome["stopped_reason"]
+                    break
+
+            if stats["stopped_reason"] != "completed" or cursor == 0:
                 break
     except RedisError as exc:
         _record_error(stats, "scan", exc)

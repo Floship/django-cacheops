@@ -116,8 +116,17 @@ def _clear_conj_key(conj_key, *, chunk_size, max_members, deadline, dry_run):
             stats["stopped_reason"] = "time_budget"
             break
 
+        remaining = max_members - stats["members_scanned"]
+        if remaining <= 0:
+            stats["stopped_reason"] = "max_members"
+            break
+
         try:
-            cursor, members = redis_client.sscan(conj_key, cursor, count=chunk_size)
+            cursor, members = redis_client.sscan(
+                conj_key,
+                cursor,
+                count=min(chunk_size, remaining),
+            )
         except RedisError as exc:
             _record_error(stats, "sscan", exc)
             break
@@ -126,7 +135,6 @@ def _clear_conj_key(conj_key, *, chunk_size, max_members, deadline, dry_run):
             stats["stopped_reason"] = "time_budget"
             break
 
-        remaining = max_members - stats["members_scanned"]
         batch = members[:remaining]
         count_overrun = len(members) > len(batch)
 

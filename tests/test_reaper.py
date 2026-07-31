@@ -128,7 +128,7 @@ def test_dry_run_estimates_without_mutation(prefix, monkeypatch):
 
 
 def test_set_budget_caps_scan_count(prefix):
-    with patch.object(reaper.redis_client, "scan_iter", return_value=[]) as scan_iter:
+    with patch.object(reaper.redis_client, "scan", return_value=(0, [])) as scan:
         reaper.reap_conjs(
             chunk_size=100_000,
             min_conj_set_size=1,
@@ -137,7 +137,28 @@ def test_set_budget_caps_scan_count(prefix):
             time_budget_seconds=10,
         )
 
-    scan_iter.assert_called_once_with(f"{prefix}conj:*", count=2)
+    scan.assert_called_once_with(0, match=f"{prefix}conj:*", count=2)
+
+
+def test_time_budget_is_checked_after_each_outer_scan_request(prefix):
+    with patch.object(reaper.redis_client, "scan", return_value=(1, [])) as scan:
+        with patch.object(reaper.redis_client, "scan_iter", return_value=[]):
+            with patch.object(
+                reaper,
+                "_time_exhausted",
+                side_effect=[False, False, True],
+            ):
+                reaped = reaper.reap_conjs(
+                    chunk_size=100_000,
+                    min_conj_set_size=1,
+                    max_conj_sets=1,
+                    max_members=100,
+                    time_budget_seconds=1,
+                )
+
+    scan.assert_called_once_with(0, match=f"{prefix}conj:*", count=1)
+    assert reaped["sets_scanned"] == 0
+    assert reaped["stopped_reason"] == "time_budget"
 
 
 def test_member_budget_caps_sscan_count_and_slices_overrun(prefix):

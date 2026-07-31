@@ -127,7 +127,7 @@ def test_dry_run_estimates_without_mutation(prefix, monkeypatch):
     assert reaped["stale_members_removed"] == 0
 
 
-def test_member_budget_slices_sscan_count_overrun(prefix):
+def test_member_budget_caps_sscan_count_and_slices_overrun(prefix):
     members = [f"{prefix}q:{index}" for index in range(3)]
     add_conj(prefix, "count-hint", *members)
 
@@ -136,7 +136,7 @@ def test_member_budget_slices_sscan_count_overrun(prefix):
             reaper.redis_client,
             "sscan",
             return_value=(0, [member.encode() for member in members]),
-        ),
+        ) as sscan,
         patch.object(
             reaper.redis_client,
             "exists",
@@ -144,7 +144,7 @@ def test_member_budget_slices_sscan_count_overrun(prefix):
         ) as exists,
     ):
         reaped = reaper.reap_conjs(
-            chunk_size=1,
+            chunk_size=100_000,
             min_conj_set_size=1,
             dry_run=True,
             max_conj_sets=1,
@@ -152,6 +152,7 @@ def test_member_budget_slices_sscan_count_overrun(prefix):
             time_budget_seconds=10,
         )
 
+    assert sscan.call_args.kwargs["count"] == 2
     assert len(exists.call_args.args) == 2
     assert reaped["members_scanned"] == 2
     assert reaped["stopped_reason"] == "max_members"

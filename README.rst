@@ -302,6 +302,11 @@ that cannot be influenced by added/updated/deleted object judging by query
 conditions. Most of the time this will do what you want, if it won't you can use
 one of the following:
 
+Conjunction field names are written in lexical order so equivalent query
+conditions share one Redis scheme and key. Invalidation consumes every recorded
+scheme, including keys written by older cacheops processes during a rolling
+upgrade.
+
 .. code:: python
 
     from cacheops import invalidate_obj, invalidate_model, invalidate_all
@@ -713,11 +718,17 @@ Memory usage cleanup
 
 In some cases, cacheops may leave some conjunction keys of expired cache keys in redis without being able to invalidate them. Those will still expire with age, but in the meantime may cause issues like slow invalidation (even "BUSY Redis ...") and extra memory usage. To prevent that it is advised to not cache complex queries, see `Perfomance tips <#performance-tips>`_, 5.
 
-Cacheops ships with a ``cacheops.reap_conjs`` function that can clean up these keys,
-ignoring conjunction sets with some reasonable size. It can be called using the ``reapconjs`` management command::
+Cacheops ships with a ``cacheops.reap_conjs`` function that can clean up these keys
+within time, eligible-set, and total-member limits. It can be called using the
+``reapconjs`` management command::
 
-    ./manage.py reapconjs --chunk-size=100 --min-conj-set-size=10000  # with custom values
-    ./manage.py reapconjs                                             # with default values (chunks=1000, min size=1000)
+    ./manage.py reapconjs --dry-run
+    ./manage.py reapconjs --chunk-size=100 --min-conj-set-size=10000 \
+        --max-conj-sets=10 --max-members=10000 --time-budget-seconds=30
+
+The fallback ceilings are one eligible set, 1000 inspected members, and one second.
+They bound work but are not universal production-safe tuning. Use dry-run evidence to
+choose finite limits for each Redis deployment. The JSON result reports partial stops.
 
 The command is a small wrapper that calls a function with the main logic. You can also call it from your code, for example from a Celery task:
 
@@ -730,6 +741,9 @@ The command is a small wrapper that calls a function with the main logic. You ca
         reap_conjs(
             chunk_size=2000,
             min_conj_set_size=100,
+            max_conj_sets=10,
+            max_members=10000,
+            time_budget_seconds=30,
         )
 
 

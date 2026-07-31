@@ -53,7 +53,8 @@ def reap_conjs(
 
     prefix = get_prefix(dbs=[using])
     try:
-        for conj_key in redis_client.scan_iter(prefix + "conj:*", count=chunk_size):
+        scan_count = max(1, min(chunk_size, max_conj_sets))
+        for conj_key in redis_client.scan_iter(prefix + "conj:*", count=scan_count):
             if _time_exhausted(deadline):
                 stats["stopped_reason"] = "time_budget"
                 break

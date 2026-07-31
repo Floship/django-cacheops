@@ -131,26 +131,24 @@ def test_member_budget_caps_sscan_count_and_slices_overrun(prefix):
     members = [f"{prefix}q:{index}" for index in range(3)]
     add_conj(prefix, "count-hint", *members)
 
-    with (
-        patch.object(
-            reaper.redis_client,
-            "sscan",
-            return_value=(0, [member.encode() for member in members]),
-        ) as sscan,
-        patch.object(
+    with patch.object(
+        reaper.redis_client,
+        "sscan",
+        return_value=(0, [member.encode() for member in members]),
+    ) as sscan:
+        with patch.object(
             reaper.redis_client,
             "exists",
             return_value=0,
-        ) as exists,
-    ):
-        reaped = reaper.reap_conjs(
-            chunk_size=100_000,
-            min_conj_set_size=1,
-            dry_run=True,
-            max_conj_sets=1,
-            max_members=2,
-            time_budget_seconds=10,
-        )
+        ) as exists:
+            reaped = reaper.reap_conjs(
+                chunk_size=100_000,
+                min_conj_set_size=1,
+                dry_run=True,
+                max_conj_sets=1,
+                max_members=2,
+                time_budget_seconds=10,
+            )
 
     assert sscan.call_args.kwargs["count"] == 2
     assert len(exists.call_args.args) == 2

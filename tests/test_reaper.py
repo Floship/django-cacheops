@@ -127,6 +127,19 @@ def test_dry_run_estimates_without_mutation(prefix, monkeypatch):
     assert reaped["stale_members_removed"] == 0
 
 
+def test_set_budget_caps_scan_count(prefix):
+    with patch.object(reaper.redis_client, "scan_iter", return_value=[]) as scan_iter:
+        reaper.reap_conjs(
+            chunk_size=100_000,
+            min_conj_set_size=1,
+            max_conj_sets=2,
+            max_members=100,
+            time_budget_seconds=10,
+        )
+
+    scan_iter.assert_called_once_with(f"{prefix}conj:*", count=2)
+
+
 def test_member_budget_caps_sscan_count_and_slices_overrun(prefix):
     members = [f"{prefix}q:{index}" for index in range(3)]
     add_conj(prefix, "count-hint", *members)

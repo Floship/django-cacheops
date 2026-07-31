@@ -302,6 +302,11 @@ that cannot be influenced by added/updated/deleted object judging by query
 conditions. Most of the time this will do what you want, if it won't you can use
 one of the following:
 
+Conjunction field names are written in lexical order so equivalent query
+conditions share one Redis scheme and key. Invalidation consumes every recorded
+scheme, including keys written by older cacheops processes during a rolling
+upgrade.
+
 .. code:: python
 
     from cacheops import invalidate_obj, invalidate_model, invalidate_all
